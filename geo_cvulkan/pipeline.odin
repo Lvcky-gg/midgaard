@@ -16,6 +16,7 @@ Vk_Pipeline :: struct {
 	layout:       vk.PipelineLayout,
 	globe_desc_pool: vk.DescriptorPool,
 	globe_desc_set: vk.DescriptorSet,
+	sky:          vk.Pipeline,
 	globe:        vk.Pipeline,
 	features:     vk.Pipeline,
 	framebuffers: []vk.Framebuffer,
@@ -27,6 +28,7 @@ vk_pipeline_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Pipeline {
 	_make_depth_resources(ctx, sc, &p)
 	_make_globe_set_layout(ctx, &p)
 	_make_layout(ctx, &p)
+	_make_sky_pipeline(ctx, sc, &p)
 	_make_globe_pipeline(ctx, sc, &p)
 	_make_feature_pipeline(ctx, sc, &p)
 	_make_framebuffers(ctx, sc, &p)
@@ -35,6 +37,7 @@ vk_pipeline_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Pipeline {
 
 vk_pipeline_destroy :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 	for fb in p.framebuffers { vk.DestroyFramebuffer(ctx.device, fb, nil) }
+	vk.DestroyPipeline(ctx.device, p.sky, nil)
 	vk.DestroyPipeline(ctx.device, p.features, nil)
 	vk.DestroyPipeline(ctx.device, p.globe, nil)
 	if p.globe_desc_pool != 0 {
@@ -256,6 +259,22 @@ _make_globe_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipelin
 	p.globe = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .TRIANGLE_LIST)
 }
 
+_make_sky_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
+	vert_m := load_shader(ctx.device, "shaders/sky.vert.spv")
+	frag_m := load_shader(ctx.device, "shaders/sky.frag.spv")
+	defer vk.DestroyShaderModule(ctx.device, vert_m, nil)
+	defer vk.DestroyShaderModule(ctx.device, frag_m, nil)
+
+	stages := [2]vk.PipelineShaderStageCreateInfo{
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX},   module = vert_m, pName = "main"},
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = frag_m, pName = "main"},
+	}
+
+	vert_in := vk.PipelineVertexInputStateCreateInfo{sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+	p.sky = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .TRIANGLE_LIST,
+		enable_depth = false, enable_blend = false, cull_mode = {}, front_face = .COUNTER_CLOCKWISE)
+}
+
 _make_feature_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
 	vert_m := load_shader(ctx.device, "shaders/feature.vert.spv")
 	frag_m := load_shader(ctx.device, "shaders/feature.frag.spv")
@@ -283,7 +302,11 @@ _make_feature_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipel
 _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 	stages: []vk.PipelineShaderStageCreateInfo,
 	vert_in: ^vk.PipelineVertexInputStateCreateInfo,
-	topology: vk.PrimitiveTopology) -> vk.Pipeline {
+	topology: vk.PrimitiveTopology,
+	enable_depth := true,
+	enable_blend := true,
+	cull_mode: vk.CullModeFlags = {.BACK},
+	front_face: vk.FrontFace = .CLOCKWISE) -> vk.Pipeline {
 
 	ia  := vk.PipelineInputAssemblyStateCreateInfo{sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, topology = topology}
 	vp  := vk.Viewport{width = f32(sc.extent.width), height = f32(sc.extent.height), maxDepth = 1}
@@ -297,14 +320,14 @@ _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 	}
 	rs := vk.PipelineRasterizationStateCreateInfo{
 		sType       = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		polygonMode = .FILL, cullMode = {.BACK}, frontFace = .CLOCKWISE, lineWidth = 1,
+		polygonMode = .FILL, cullMode = cull_mode, frontFace = front_face, lineWidth = 1,
 	}
 	ms := vk.PipelineMultisampleStateCreateInfo{
 		sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 		rasterizationSamples = {._1},
 	}
 	blend_att := vk.PipelineColorBlendAttachmentState{
-		blendEnable         = true,
+		blendEnable         = b32(enable_blend),
 		srcColorBlendFactor = .SRC_ALPHA, dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA, colorBlendOp = .ADD,
 		srcAlphaBlendFactor = .ONE,       dstAlphaBlendFactor = .ZERO,                alphaBlendOp = .ADD,
 		colorWriteMask      = {.R, .G, .B, .A},
@@ -316,8 +339,8 @@ _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 	}
 	depth := vk.PipelineDepthStencilStateCreateInfo{
 		sType            = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		depthTestEnable  = true,
-		depthWriteEnable = true,
+		depthTestEnable  = b32(enable_depth),
+		depthWriteEnable = b32(enable_depth),
 		depthCompareOp   = .LESS_OR_EQUAL,
 	}
 

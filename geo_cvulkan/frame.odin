@@ -109,7 +109,7 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 
 	vk.BeginCommandBuffer(cmd, &vk.CommandBufferBeginInfo{sType = .COMMAND_BUFFER_BEGIN_INFO, flags = {.ONE_TIME_SUBMIT}})
 
-	color_clear := vk.ClearValue{color = {float32 = {0.03, 0.06, 0.11, 1.0}}}
+	color_clear := vk.ClearValue{color = {float32 = {0.0, 0.0, 0.0, 1.0}}}
 	depth_clear := vk.ClearValue{depthStencil = {depth = 1.0, stencil = 0}}
 	clears := [2]vk.ClearValue{color_clear, depth_clear}
 	rp_begin := vk.RenderPassBeginInfo{
@@ -122,6 +122,10 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 	vk.CmdBeginRenderPass(cmd, &rp_begin, .INLINE)
 
 	pc := geo_render.Push_Constants{mvp = ds.mvp}
+
+	// Sky/background
+	vk.CmdBindPipeline(cmd, .GRAPHICS, pl.sky)
+	vk.CmdDraw(cmd, 3, 1, 0, 0)
 
 	// Globe
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pl.globe)
