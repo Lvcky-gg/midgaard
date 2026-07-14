@@ -8,6 +8,10 @@ import geo_render "../geo_render"
 
 Vk_Pipeline :: struct {
 	render_pass:  vk.RenderPass,
+	depth_format: vk.Format,
+	depth_image:  vk.Image,
+	depth_memory: vk.DeviceMemory,
+	depth_view:   vk.ImageView,
 	globe_set_layout: vk.DescriptorSetLayout,
 	layout:       vk.PipelineLayout,
 	globe_desc_pool: vk.DescriptorPool,
@@ -20,6 +24,7 @@ Vk_Pipeline :: struct {
 vk_pipeline_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Pipeline {
 	p: Vk_Pipeline
 	_make_render_pass(ctx, sc, &p)
+	_make_depth_resources(ctx, sc, &p)
 	_make_globe_set_layout(ctx, &p)
 	_make_layout(ctx, &p)
 	_make_globe_pipeline(ctx, sc, &p)
@@ -34,6 +39,15 @@ vk_pipeline_destroy :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 	vk.DestroyPipeline(ctx.device, p.globe, nil)
 	if p.globe_desc_pool != 0 {
 		vk.DestroyDescriptorPool(ctx.device, p.globe_desc_pool, nil)
+	}
+	if p.depth_view != 0 {
+		vk.DestroyImageView(ctx.device, p.depth_view, nil)
+	}
+	if p.depth_image != 0 {
+		vk.DestroyImage(ctx.device, p.depth_image, nil)
+	}
+	if p.depth_memory != 0 {
+		vk.FreeMemory(ctx.device, p.depth_memory, nil)
 	}
 	vk.DestroyPipelineLayout(ctx.device, p.layout, nil)
 	vk.DestroyDescriptorSetLayout(ctx.device, p.globe_set_layout, nil)
@@ -105,7 +119,9 @@ load_shader :: proc(device: vk.Device, path: string) -> vk.ShaderModule {
 // ── internals ────────────────────────────────────────────────────────────────
 
 _make_render_pass :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
-	att := vk.AttachmentDescription{
+	p.depth_format = .D32_SFLOAT
+
+	color_att := vk.AttachmentDescription{
 		format         = sc.format,
 		samples        = {._1},
 		loadOp         = .CLEAR,
@@ -115,17 +131,75 @@ _make_render_pass :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) 
 		initialLayout  = .UNDEFINED,
 		finalLayout    = .PRESENT_SRC_KHR,
 	}
-	atts := [1]vk.AttachmentDescription{att}
-	ref  := vk.AttachmentReference{attachment = 0, layout = .COLOR_ATTACHMENT_OPTIMAL}
-	refs := [1]vk.AttachmentReference{ref}
-	sub  := vk.SubpassDescription{pipelineBindPoint = .GRAPHICS, colorAttachmentCount = 1, pColorAttachments = &refs[0]}
+	depth_att := vk.AttachmentDescription{
+		format         = p.depth_format,
+		samples        = {._1},
+		loadOp         = .CLEAR,
+		storeOp        = .DONT_CARE,
+		stencilLoadOp  = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout  = .UNDEFINED,
+		finalLayout    = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	}
+	atts := [2]vk.AttachmentDescription{color_att, depth_att}
+	color_ref := vk.AttachmentReference{attachment = 0, layout = .COLOR_ATTACHMENT_OPTIMAL}
+	depth_ref := vk.AttachmentReference{attachment = 1, layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL}
+	color_refs := [1]vk.AttachmentReference{color_ref}
+	sub  := vk.SubpassDescription{
+		pipelineBindPoint = .GRAPHICS,
+		colorAttachmentCount = 1,
+		pColorAttachments = &color_refs[0],
+		pDepthStencilAttachment = &depth_ref,
+	}
 	subs := [1]vk.SubpassDescription{sub}
 	ci   := vk.RenderPassCreateInfo{
 		sType           = .RENDER_PASS_CREATE_INFO,
-		attachmentCount = 1, pAttachments = &atts[0],
+		attachmentCount = 2, pAttachments = &atts[0],
 		subpassCount    = 1, pSubpasses   = &subs[0],
 	}
 	vk.CreateRenderPass(ctx.device, &ci, nil, &p.render_pass)
+}
+
+_make_depth_resources :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
+	img_ci := vk.ImageCreateInfo{
+		sType         = .IMAGE_CREATE_INFO,
+		imageType     = .D2,
+		format        = p.depth_format,
+		extent        = {width = sc.extent.width, height = sc.extent.height, depth = 1},
+		mipLevels     = 1,
+		arrayLayers   = 1,
+		samples       = {._1},
+		tiling        = .OPTIMAL,
+		usage         = {.DEPTH_STENCIL_ATTACHMENT},
+		sharingMode   = .EXCLUSIVE,
+		initialLayout = .UNDEFINED,
+	}
+	if r := vk.CreateImage(ctx.device, &img_ci, nil, &p.depth_image); r != .SUCCESS {
+		panic("vkCreateImage depth failed")
+	}
+
+	req: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(ctx.device, p.depth_image, &req)
+	alloc := vk.MemoryAllocateInfo{
+		sType           = .MEMORY_ALLOCATE_INFO,
+		allocationSize  = req.size,
+		memoryTypeIndex = _find_memory_type(ctx.physical_device, req.memoryTypeBits, {.DEVICE_LOCAL}),
+	}
+	if r := vk.AllocateMemory(ctx.device, &alloc, nil, &p.depth_memory); r != .SUCCESS {
+		panic("vkAllocateMemory depth failed")
+	}
+	vk.BindImageMemory(ctx.device, p.depth_image, p.depth_memory, 0)
+
+	view_ci := vk.ImageViewCreateInfo{
+		sType      = .IMAGE_VIEW_CREATE_INFO,
+		image      = p.depth_image,
+		viewType   = .D2,
+		format     = p.depth_format,
+		subresourceRange = {aspectMask = {.DEPTH}, levelCount = 1, layerCount = 1},
+	}
+	if r := vk.CreateImageView(ctx.device, &view_ci, nil, &p.depth_view); r != .SUCCESS {
+		panic("vkCreateImageView depth failed")
+	}
 }
 
 _make_globe_set_layout :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
@@ -240,6 +314,12 @@ _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		attachmentCount = 1, pAttachments = &blend_atts[0],
 	}
+	depth := vk.PipelineDepthStencilStateCreateInfo{
+		sType            = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		depthTestEnable  = true,
+		depthWriteEnable = true,
+		depthCompareOp   = .LESS_OR_EQUAL,
+	}
 
 	ci := vk.GraphicsPipelineCreateInfo{
 		sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
@@ -250,6 +330,7 @@ _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 		pRasterizationState = &rs,
 		pMultisampleState   = &ms,
 		pColorBlendState    = &blend,
+		pDepthStencilState  = &depth,
 		layout              = p.layout,
 		renderPass          = p.render_pass,
 	}
@@ -262,11 +343,11 @@ _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,
 _make_framebuffers :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
 	p.framebuffers = make([]vk.Framebuffer, len(sc.views))
 	for i in 0..<len(sc.views) {
-		views := [1]vk.ImageView{sc.views[i]}
+		views := [2]vk.ImageView{sc.views[i], p.depth_view}
 		ci := vk.FramebufferCreateInfo{
 			sType           = .FRAMEBUFFER_CREATE_INFO,
 			renderPass      = p.render_pass,
-			attachmentCount = 1, pAttachments = &views[0],
+			attachmentCount = 2, pAttachments = &views[0],
 			width           = sc.extent.width,
 			height          = sc.extent.height,
 			layers          = 1,
