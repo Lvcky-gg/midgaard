@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Midgaard Geospatial MVP</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="eyebrow">Midgaard</div>
+        <h1>Geospatial MVP</h1>
+        <p>3D-first globe with imagery and feature layers.</p>
+      </div>
+
+      <section class="panel">
+        <h2>Layers</h2>
+        <label><input id="toggleImagery" type="checkbox" checked> Imagery</label>
+        <label><input id="toggleFeatures" type="checkbox" checked> Feature layer</label>
+        <label><input id="toggleRoutes" type="checkbox" checked> Routes</label>
+      </section>
+
+      <section class="panel">
+        <h2>Selected feature</h2>
+        <div id="selectionTitle" class="selection-title">None selected</div>
+        <div id="selectionDetails" class="selection-details">Click a point on the globe.</div>
+      </section>
+
+      <section class="panel compact">
+        <h2>Controls</h2>
+        <p>Drag to rotate. Scroll to zoom. Click a marker to inspect it.</p>
+      </section>
+
+      <section class="panel compact">
+        <h2>Status</h2>
+        <p>Renderer: WebGL</p>
+        <p>cvulkan: stubbed in Odin</p>
+      </section>
+    </aside>
+
+    <main class="viewport">
+      <canvas id="globe"></canvas>
+      <div class="hud">
+        <span>Imagery</span>
+        <span>Feature Layers</span>
+        <span>3D First</span>
+      </div>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
