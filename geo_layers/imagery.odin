@@ -140,36 +140,28 @@ _ensure_parent_dir :: proc(path: string) {
 	}
 }
 
-// imagery_read_tile_edge_first tries cache first, then local bundle, then builds a remote URL.
-imagery_read_tile_edge_first :: proc(layer: ^ImageryLayer, key: Tile_Key, allocator := context.allocator) -> Imagery_Tile_Result {
+// imagery_probe_tile_edge_first checks tile availability without loading bytes.
+// Use this in render-time streaming loops to avoid disk-read stalls.
+imagery_probe_tile_edge_first :: proc(layer: ^ImageryLayer, key: Tile_Key) -> Imagery_Tile_Result {
 	res: Imagery_Tile_Result
 	res.cache_path = imagery_tile_cache_path(layer, key)
 
 	if res.cache_path != "" && os.exists(res.cache_path) {
-		bytes, err := os.read_entire_file_from_path(res.cache_path, allocator)
-		if err == nil {
-			res.ok = true
-			res.bytes = bytes
-			res.source = .Cache
-			return res
-		}
+		res.ok = true
+		res.source = .Cache
+		return res
 	}
 
 	if layer.bundle_root != "" {
 		bundle_path := imagery_tile_bundle_path(layer, key)
 		if os.exists(bundle_path) {
-			bytes, err := os.read_entire_file_from_path(bundle_path, allocator)
-			if err == nil {
-				res.ok = true
-				res.bytes = bytes
-				res.source = .Bundle
-
-				if res.cache_path != "" && bundle_path != res.cache_path {
-					_ensure_parent_dir(res.cache_path)
-					_ = os.copy_file(res.cache_path, bundle_path)
-				}
-				return res
+			res.ok = true
+			res.source = .Bundle
+			if res.cache_path != "" && bundle_path != res.cache_path {
+				_ensure_parent_dir(res.cache_path)
+				_ = os.copy_file(res.cache_path, bundle_path)
 			}
+			return res
 		}
 	}
 
@@ -177,5 +169,38 @@ imagery_read_tile_edge_first :: proc(layer: ^ImageryLayer, key: Tile_Key, alloca
 	if res.fetch_url != "" {
 		res.source = .Remote
 	}
+	return res
+}
+
+// imagery_read_tile_edge_first tries cache first, then local bundle, then builds a remote URL.
+imagery_read_tile_edge_first :: proc(layer: ^ImageryLayer, key: Tile_Key, allocator := context.allocator) -> Imagery_Tile_Result {
+	res := imagery_probe_tile_edge_first(layer, key)
+	if !res.ok {
+		return res
+	}
+
+	if res.source == .Cache {
+		bytes, err := os.read_entire_file_from_path(res.cache_path, allocator)
+		if err == nil {
+			res.bytes = bytes
+			return res
+		}
+		res.ok = false
+		res.source = .None
+		res.fetch_url = imagery_tile_remote_url(layer, key)
+		if res.fetch_url != "" { res.source = .Remote }
+		return res
+	}
+
+	bundle_path := imagery_tile_bundle_path(layer, key)
+	bytes, err := os.read_entire_file_from_path(bundle_path, allocator)
+	if err == nil {
+		res.bytes = bytes
+		return res
+	}
+	res.ok = false
+	res.source = .None
+	res.fetch_url = imagery_tile_remote_url(layer, key)
+	if res.fetch_url != "" { res.source = .Remote }
 	return res
 }

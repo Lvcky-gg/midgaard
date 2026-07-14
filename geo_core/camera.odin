@@ -19,14 +19,21 @@ camera_create :: proc(width, height: u32) -> Camera {
 }
 
 camera_on_drag :: proc(c: ^Camera, dx, dy: f32) {
-	c.azimuth  += dx * 0.008
+	c.azimuth  += dx * 0.0053
+	c.elevation = clamp(c.elevation - dy * 0.0053,
+		f32(-math.PI/2.0) + 0.06,
+		f32( math.PI/2.0) - 0.06)
+}
+
+camera_on_tilt :: proc(c: ^Camera, dy: f32) {
 	c.elevation = clamp(c.elevation - dy * 0.008,
 		f32(-math.PI/2.0) + 0.06,
 		f32( math.PI/2.0) - 0.06)
 }
 
 camera_on_scroll :: proc(c: ^Camera, delta: f32) {
-	c.distance = clamp(c.distance - delta * 0.20, 1.03, 18.0)
+	step := max(f32(0.06), c.distance * 0.14)
+	c.distance = clamp(c.distance - delta * step, 1.03, 18.0)
 }
 
 camera_mvp :: proc(c: Camera) -> [16]f32 {

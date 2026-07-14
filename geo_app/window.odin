@@ -10,6 +10,7 @@ Window :: struct {
 	drag_x:   f64,
 	drag_y:   f64,
 	dragging: bool,
+	drag_button: c.int,
 }
 
 window_create :: proc(width, height: i32, title: cstring) -> Window {
@@ -46,8 +47,16 @@ _on_key :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int)
 _on_mouse_btn :: proc "c" (win: glfw.WindowHandle, button, action, mods: c.int) {
 	context = runtime.default_context()
 	if g_app == nil { return }
-	if button == glfw.MOUSE_BUTTON_LEFT {
-		g_app.window.dragging = action == glfw.PRESS
+	w := &g_app.window
+	if action == glfw.PRESS && (button == glfw.MOUSE_BUTTON_LEFT || button == glfw.MOUSE_BUTTON_RIGHT) {
+		w.dragging = true
+		w.drag_button = button
+		g_app.camera_interaction_cooldown = 10
+		return
+	}
+	if action == glfw.RELEASE && button == w.drag_button {
+		w.dragging = false
+		w.drag_button = 0
 	}
 }
 
@@ -58,7 +67,12 @@ _on_cursor :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 	if w.dragging {
 		dx := f32(x - w.drag_x)
 		dy := f32(y - w.drag_y)
-		geo_core.camera_on_drag(&g_app.camera, dx, dy)
+		g_app.camera_interaction_cooldown = 10
+		if w.drag_button == glfw.MOUSE_BUTTON_RIGHT {
+			geo_core.camera_on_tilt(&g_app.camera, dy)
+		} else {
+			geo_core.camera_on_drag(&g_app.camera, dx, dy)
+		}
 	}
 	w.drag_x = x
 	w.drag_y = y
@@ -68,4 +82,5 @@ _on_scroll :: proc "c" (win: glfw.WindowHandle, xoff, yoff: f64) {
 	context = runtime.default_context()
 	if g_app == nil { return }
 	geo_core.camera_on_scroll(&g_app.camera, f32(yoff))
+	g_app.imagery_scroll_cooldown = 24
 }

@@ -27,6 +27,9 @@ App :: struct {
 	globe_tex:     geo_cvulkan.Vk_Texture,
 	globe_tex_path: string,
 	imagery_frame: u64,
+	imagery_scroll_cooldown: u32,
+	camera_interaction_cooldown: u32,
+	world_lod_switch_cooldown: u32,
 	active_world_lod: i32,
 	camera:        geo_core.Camera,
 	scene:         geo_layers.Scene,
@@ -121,10 +124,9 @@ _warm_edge_imagery :: proc(app: ^App) {
 		layer := &app.scene.imagery_layers[i]
 		_ = geo_ingest.ingest_prepare_imagery_cache(layer)
 		for key in seed_keys {
-			tile := geo_layers.imagery_read_tile_edge_first(layer, key)
+			tile := geo_layers.imagery_probe_tile_edge_first(layer, key)
 			if tile.ok {
 				hits += 1
-				delete(tile.bytes)
 				continue
 			}
 			if tile.fetch_url != "" {
@@ -160,23 +162,42 @@ _tick_imagery_streaming :: proc(app: ^App) {
 	if len(app.scene.imagery_layers) == 0 { return }
 
 	app.imagery_frame += 1
+	if app.world_lod_switch_cooldown > 0 {
+		app.world_lod_switch_cooldown -= 1
+	}
 	focus := geo_core.camera_focus_lat_lon(app.camera)
 	target_zoom := _target_imagery_zoom(app.camera)
+
+	// Keep scroll interaction responsive by deferring heavier I/O work
+	// until a short cooldown after wheel input ends.
+	if app.imagery_scroll_cooldown > 0 {
+		app.imagery_scroll_cooldown -= 1
+		return
+	}
+
+	// Keep drag-orbit and tilt interaction responsive by deferring streaming
+	// while the user is actively rotating the globe.
+	if app.camera_interaction_cooldown > 0 {
+		app.camera_interaction_cooldown -= 1
+		return
+	}
 
 	for i in 0..<len(app.scene.imagery_layers) {
 		layer := &app.scene.imagery_layers[i]
 		_prefetch_focus_tiles(app, layer, focus, target_zoom)
 	}
 
-	if app.imagery_frame % 8 == 0 {
-		_ = geo_sync.edge_fetch_queue_run_batch(&app.imagery_fetch_queue, 6, 6)
+	if app.imagery_frame % 20 == 0 {
+		_ = geo_sync.edge_fetch_queue_run_batch(&app.imagery_fetch_queue, 2, 4)
 	}
 
 	if app.imagery_frame % 240 == 0 {
 		geo_sync.edge_fetch_queue_trim_finished(&app.imagery_fetch_queue, 1024)
 	}
 
-	_refresh_world_imagery_lod(app, target_zoom, false)
+	if app.world_lod_switch_cooldown == 0 && app.imagery_frame % 120 == 0 {
+		_refresh_world_imagery_lod(app, target_zoom, false)
+	}
 }
 
 _target_imagery_zoom :: proc(cam: geo_core.Camera) -> u32 {
@@ -216,9 +237,8 @@ _prefetch_focus_tiles :: proc(app: ^App, layer: ^geo_layers.ImageryLayer, focus:
 				if nx < 0 { nx += tiles_per_axis }
 
 				key := geo_layers.Tile_Key{z = tile_z, x = u32(nx), y = u32(ny)}
-				tile := geo_layers.imagery_read_tile_edge_first(layer, key)
+				tile := geo_layers.imagery_probe_tile_edge_first(layer, key)
 				if tile.ok {
-					delete(tile.bytes)
 					continue
 				}
 				if tile.fetch_url == "" { continue }
@@ -235,23 +255,23 @@ _prefetch_focus_tiles :: proc(app: ^App, layer: ^geo_layers.ImageryLayer, focus:
 }
 
 _select_world_imagery_lod :: proc(target_zoom: u32) -> (string, string, i32) {
-	if target_zoom >= 9 {
-		return "./.cache/imagery/base/world_16384x8192.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=16384,8192&format=jpg&f=image",
-			3
-	}
-	if target_zoom >= 7 {
-		return "./.cache/imagery/base/world_12288x6144.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=12288,6144&format=jpg&f=image",
+	if target_zoom >= 8 {
+		return "./.cache/imagery/base/world_8192x4096.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=8192,4096&format=jpg&f=image",
 			2
 	}
 	if target_zoom >= 5 {
-		return "./.cache/imagery/base/world_8192x4096.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=8192,4096&format=jpg&f=image",
+		return "./.cache/imagery/base/world_6144x3072.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=6144,3072&format=jpg&f=image",
 			1
 	}
-	return "./.cache/imagery/base/world_4096x2048.jpg",
-		"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=4096,2048&format=jpg&f=image",
+	if target_zoom >= 3 {
+		return "./.cache/imagery/base/world_4096x2048.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=4096,2048&format=jpg&f=image",
+			0
+	}
+	return "./.cache/imagery/base/world_3072x1536.jpg",
+		"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=3072,1536&format=jpg&f=image",
 		0
 }
 
@@ -264,6 +284,7 @@ _refresh_world_imagery_lod :: proc(app: ^App, target_zoom: u32, allow_blocking_f
 	if os.exists(path) {
 		_set_globe_texture_path(app, path)
 		app.active_world_lod = lod
+		app.world_lod_switch_cooldown = 240
 		return
 	}
 
@@ -276,6 +297,7 @@ _refresh_world_imagery_lod :: proc(app: ^App, target_zoom: u32, allow_blocking_f
 		if os.exists(path) {
 			_set_globe_texture_path(app, path)
 			app.active_world_lod = lod
+			app.world_lod_switch_cooldown = 240
 		}
 		return
 	}
