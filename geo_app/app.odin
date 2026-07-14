@@ -30,6 +30,10 @@ App :: struct {
 	imagery_scroll_cooldown: u32,
 	camera_interaction_cooldown: u32,
 	world_lod_switch_cooldown: u32,
+	have_last_prefetch: bool,
+	last_prefetch_zoom: u32,
+	last_prefetch_x: u32,
+	last_prefetch_y: u32,
 	active_world_lod: i32,
 	camera:        geo_core.Camera,
 	scene:         geo_layers.Scene,
@@ -165,6 +169,12 @@ _tick_imagery_streaming :: proc(app: ^App) {
 	if app.world_lod_switch_cooldown > 0 {
 		app.world_lod_switch_cooldown -= 1
 	}
+
+	// Keep this subsystem on a tighter frame budget.
+	if app.imagery_frame % 3 != 0 {
+		return
+	}
+
 	focus := geo_core.camera_focus_lat_lon(app.camera)
 	target_zoom := _target_imagery_zoom(app.camera)
 
@@ -182,13 +192,27 @@ _tick_imagery_streaming :: proc(app: ^App) {
 		return
 	}
 
-	for i in 0..<len(app.scene.imagery_layers) {
-		layer := &app.scene.imagery_layers[i]
-		_prefetch_focus_tiles(app, layer, focus, target_zoom)
+	primary := &app.scene.imagery_layers[0]
+	focus_key := geo_layers.imagery_lon_lat_to_tile_key(primary, [2]f64{focus.lat, focus.lon}, target_zoom)
+	focus_changed := !app.have_last_prefetch ||
+		app.last_prefetch_zoom != target_zoom ||
+		app.last_prefetch_x != focus_key.x ||
+		app.last_prefetch_y != focus_key.y
+
+	// If camera focus hasn't changed tile/zoom, only occasionally sweep.
+	if focus_changed || app.imagery_frame % 30 == 0 {
+		for i in 0..<len(app.scene.imagery_layers) {
+			layer := &app.scene.imagery_layers[i]
+			_prefetch_focus_tiles(app, layer, focus, target_zoom)
+		}
+		app.have_last_prefetch = true
+		app.last_prefetch_zoom = target_zoom
+		app.last_prefetch_x = focus_key.x
+		app.last_prefetch_y = focus_key.y
 	}
 
-	if app.imagery_frame % 20 == 0 {
-		_ = geo_sync.edge_fetch_queue_run_batch(&app.imagery_fetch_queue, 2, 4)
+	if app.imagery_frame % 30 == 0 {
+		_ = geo_sync.edge_fetch_queue_run_batch(&app.imagery_fetch_queue, 1, 3)
 	}
 
 	if app.imagery_frame % 240 == 0 {
