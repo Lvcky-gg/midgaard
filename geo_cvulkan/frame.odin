@@ -23,8 +23,13 @@ Vk_Draw_State :: struct {
 	globe_ic:      u32,
 	feature_vb:    Vk_Buffer,
 	feature_count: u32,
+	label_vb:      Vk_Buffer,
+	label_count:   u32,
 	mvp:           [16]f32,
 	time_sec:      f32,
+	selected_index: i32,
+	viewport:      [2]f32,
+	eye:           [3]f32,
 }
 
 vk_frame_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Frame_Data {
@@ -122,11 +127,19 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 	}
 	vk.CmdBeginRenderPass(cmd, &rp_begin, .INLINE)
 
-	pc := geo_render.Push_Constants{mvp = ds.mvp, time_sec = ds.time_sec}
+	pc := geo_render.Push_Constants{
+		mvp            = ds.mvp,
+		time_sec       = ds.time_sec,
+		selected_index = ds.selected_index,
+		viewport       = ds.viewport,
+		eye            = {ds.eye[0], ds.eye[1], ds.eye[2], 0},
+	}
+	// One push covers every pipeline: they share the same layout, and the
+	// stage flags must match the declared push-constant range exactly.
+	vk.CmdPushConstants(cmd, pl.layout, {.VERTEX, .FRAGMENT}, 0, size_of(geo_render.Push_Constants), &pc)
 
 	// Sky/background
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pl.sky)
-	vk.CmdPushConstants(cmd, pl.layout, {.FRAGMENT}, 0, size_of(geo_render.Push_Constants), &pc)
 	vk.CmdDraw(cmd, 3, 1, 0, 0)
 
 	// Globe
@@ -139,7 +152,6 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 		sets := [1]vk.DescriptorSet{pl.globe_desc_set}
 		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, pl.layout, 0, 1, &sets[0], 0, nil)
 	}
-	vk.CmdPushConstants(cmd, pl.layout, {.VERTEX}, 0, size_of(geo_render.Push_Constants), &pc)
 	vk.CmdDrawIndexed(cmd, ds.globe_ic, 1, 0, 0, 0)
 
 	// Feature points
@@ -147,8 +159,17 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 		vk.CmdBindPipeline(cmd, .GRAPHICS, pl.features)
 		feat_vbs := [1]vk.Buffer{ds.feature_vb.handle}
 		vk.CmdBindVertexBuffers(cmd, 0, 1, &feat_vbs[0], &offsets[0])
-		vk.CmdPushConstants(cmd, pl.layout, {.VERTEX}, 0, size_of(geo_render.Push_Constants), &pc)
 		vk.CmdDraw(cmd, ds.feature_count, 1, 0, 0)
+	}
+
+	// Feature labels (billboarded text; needs the font atlas descriptor)
+	if ds.label_count > 0 && pl.label_desc_set != 0 {
+		vk.CmdBindPipeline(cmd, .GRAPHICS, pl.labels)
+		label_vbs := [1]vk.Buffer{ds.label_vb.handle}
+		vk.CmdBindVertexBuffers(cmd, 0, 1, &label_vbs[0], &offsets[0])
+		label_sets := [1]vk.DescriptorSet{pl.label_desc_set}
+		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, pl.layout, 0, 1, &label_sets[0], 0, nil)
+		vk.CmdDraw(cmd, ds.label_count, 1, 0, 0)
 	}
 
 	vk.CmdEndRenderPass(cmd)

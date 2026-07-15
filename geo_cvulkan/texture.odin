@@ -34,6 +34,15 @@ vk_texture_create_from_file :: proc(ctx: ^Vk_Context, path: string) -> Vk_Textur
 	return _create_texture_rgba8(ctx, img.width, img.height, rgba)
 }
 
+// vk_texture_create_from_rgba8 creates a sampled texture from raw RGBA8 pixels.
+vk_texture_create_from_rgba8 :: proc(ctx: ^Vk_Context, width, height: int, rgba: []u8) -> Vk_Texture {
+	if len(rgba) != width*height*4 {
+		fallback := [4]u8{26, 48, 74, 255}
+		return _create_texture_rgba8(ctx, 1, 1, fallback[:])
+	}
+	return _create_texture_rgba8(ctx, width, height, rgba)
+}
+
 vk_texture_destroy :: proc(ctx: ^Vk_Context, t: ^Vk_Texture) {
 	if t.view != 0 {
 		vk.DestroyImageView(ctx.device, t.view, nil)

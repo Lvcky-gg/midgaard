@@ -24,6 +24,10 @@ App :: struct {
 	globe_ic:      u32,
 	feature_vb:    geo_cvulkan.Vk_Buffer,
 	feature_count: u32,
+	label_vb:      geo_cvulkan.Vk_Buffer,
+	label_count:   u32,
+	font_tex:      geo_cvulkan.Vk_Texture,
+	selected_feature: i32,
 	globe_tex:     geo_cvulkan.Vk_Texture,
 	globe_tex_path: string,
 	imagery_frame: u64,
@@ -45,11 +49,12 @@ app_run :: proc() {
 	g_app = &app
 
 	app.scene = demo_scene()
+	app.selected_feature = -1
 	fmt.printf("Midgaard — layers:%d  imagery:%d  features:%d  routes:%d\n",
 		len(app.scene.layers), len(app.scene.imagery_layers), len(app.scene.features), len(app.scene.routes))
 	_warm_edge_imagery(&app)
 
-	app.window = window_create(3440, 1280, "Midgaard")
+	app.window = window_create(1920, 1080, "Midgaard")
 
 	loader := geo_cvulkan.vk_load_library()
 	app.ctx      = geo_cvulkan.vk_context_create(app.window.handle, loader)
@@ -59,6 +64,7 @@ app_run :: proc() {
 	app.camera    = geo_core.camera_create(app.swapchain.extent.width, app.swapchain.extent.height)
 
 	_upload_geo(&app)
+	_upload_font_atlas(&app)
 	_load_globe_imagery(&app)
 
 	for !window_should_close(&app.window) {
@@ -75,8 +81,13 @@ app_run :: proc() {
 			globe_ic      = app.globe_ic,
 			feature_vb    = app.feature_vb,
 			feature_count = app.feature_count,
+			label_vb      = app.label_vb,
+			label_count   = app.label_count,
 			mvp           = geo_core.camera_mvp(app.camera),
 			time_sec      = time_sec,
+			selected_index = app.selected_feature,
+			viewport      = {f32(app.swapchain.extent.width), f32(app.swapchain.extent.height)},
+			eye           = geo_core.camera_eye(app.camera),
 		}
 		geo_cvulkan.vk_draw_frame(&ds)
 	}
@@ -105,12 +116,31 @@ _upload_geo :: proc(app: ^App) {
 			vk.DeviceSize(len(pts)*size_of(geo_layers.Feature_Point)),
 			{.VERTEX_BUFFER}, raw_data(pts))
 	}
+
+	labels := geo_layers.scene_label_vertices(&app.scene)
+	defer delete(labels)
+	app.label_count = u32(len(labels))
+	if len(labels) > 0 {
+		app.label_vb = geo_cvulkan.vk_buffer_upload(&app.ctx,
+			vk.DeviceSize(len(labels)*size_of(geo_layers.Label_Vertex)),
+			{.VERTEX_BUFFER}, raw_data(labels))
+	}
+}
+
+_upload_font_atlas :: proc(app: ^App) {
+	atlas := geo_layers.font_atlas_rgba8()
+	defer delete(atlas)
+	app.font_tex = geo_cvulkan.vk_texture_create_from_rgba8(&app.ctx,
+		geo_layers.FONT_ATLAS_W, geo_layers.FONT_ATLAS_H, atlas)
+	geo_cvulkan.vk_pipeline_set_label_texture(&app.ctx, &app.pipeline, &app.font_tex)
 }
 
 _destroy :: proc(app: ^App) {
+	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.label_vb)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.feature_vb)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.globe_ib)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.globe_vb)
+	geo_cvulkan.vk_texture_destroy(&app.ctx, &app.font_tex)
 	geo_cvulkan.vk_texture_destroy(&app.ctx, &app.globe_tex)
 	geo_cvulkan.vk_frame_destroy(&app.ctx, &app.frame)
 	geo_cvulkan.vk_pipeline_destroy(&app.ctx, &app.pipeline)

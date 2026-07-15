@@ -45,6 +45,9 @@ Open `web/index.html` in a browser.
 ### Controls
 
 - Left mouse drag: orbit (rotate around the globe).
+- Left click (no drag): select the feature under the cursor; clicking empty
+  space clears the selection. The picked feature pulses and its details print
+  to the console.
 - Right mouse drag: tilt (change elevation angle only).
 - Mouse wheel: zoom in/out.
 - `Esc`: close window.
@@ -131,6 +134,18 @@ Add new scene/layer data:
 1. Extend structs and helpers in `geo_layers`.
 2. Seed demo/test data in `geo_app/demo.odin`.
 3. Convert to GPU inputs in `geo_app` upload path (and backend package if needed).
+
+Picking and labels:
+
+- Picking is CPU-side screen-space projection (`geo_app/picking.odin` +
+  `geo_core.camera_world_to_screen`), with a hemisphere test so back-side
+  features cannot be selected. Run `odin test geo_app` to validate.
+- Labels are billboarded text quads built once from feature names
+  (`geo_layers/labels.odin`, embedded public-domain 8x8 font) and offset in
+  screen space by `shaders/label.vert`; they fade past the globe horizon.
+- The selected feature index rides in the shared push constants
+  (`geo_render.Push_Constants.selected_index`) and drives the pulse highlight
+  in `shaders/feature.vert`.
 
 Add imagery behavior:
 

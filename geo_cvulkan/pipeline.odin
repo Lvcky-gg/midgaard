@@ -16,9 +16,12 @@ Vk_Pipeline :: struct {
 	layout:       vk.PipelineLayout,
 	globe_desc_pool: vk.DescriptorPool,
 	globe_desc_set: vk.DescriptorSet,
+	label_desc_pool: vk.DescriptorPool,
+	label_desc_set: vk.DescriptorSet,
 	sky:          vk.Pipeline,
 	globe:        vk.Pipeline,
 	features:     vk.Pipeline,
+	labels:       vk.Pipeline,
 	framebuffers: []vk.Framebuffer,
 }
 
@@ -31,6 +34,7 @@ vk_pipeline_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Pipeline {
 	_make_sky_pipeline(ctx, sc, &p)
 	_make_globe_pipeline(ctx, sc, &p)
 	_make_feature_pipeline(ctx, sc, &p)
+	_make_label_pipeline(ctx, sc, &p)
 	_make_framebuffers(ctx, sc, &p)
 	return p
 }
@@ -39,9 +43,13 @@ vk_pipeline_destroy :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 	for fb in p.framebuffers { vk.DestroyFramebuffer(ctx.device, fb, nil) }
 	vk.DestroyPipeline(ctx.device, p.sky, nil)
 	vk.DestroyPipeline(ctx.device, p.features, nil)
+	vk.DestroyPipeline(ctx.device, p.labels, nil)
 	vk.DestroyPipeline(ctx.device, p.globe, nil)
 	if p.globe_desc_pool != 0 {
 		vk.DestroyDescriptorPool(ctx.device, p.globe_desc_pool, nil)
+	}
+	if p.label_desc_pool != 0 {
+		vk.DestroyDescriptorPool(ctx.device, p.label_desc_pool, nil)
 	}
 	if p.depth_view != 0 {
 		vk.DestroyImageView(ctx.device, p.depth_view, nil)
@@ -59,9 +67,18 @@ vk_pipeline_destroy :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 }
 
 vk_pipeline_set_globe_texture :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline, tex: ^Vk_Texture) {
+	_set_sampled_texture(ctx, p, tex, &p.globe_desc_pool, &p.globe_desc_set)
+}
+
+vk_pipeline_set_label_texture :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline, tex: ^Vk_Texture) {
+	_set_sampled_texture(ctx, p, tex, &p.label_desc_pool, &p.label_desc_set)
+}
+
+_set_sampled_texture :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline, tex: ^Vk_Texture,
+	pool: ^vk.DescriptorPool, set: ^vk.DescriptorSet) {
 	if tex == nil || !tex.ready { return }
 
-	if p.globe_desc_pool == 0 {
+	if pool^ == 0 {
 		pool_size := vk.DescriptorPoolSize{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 1}
 		pool_sizes := [1]vk.DescriptorPoolSize{pool_size}
 		pool_ci := vk.DescriptorPoolCreateInfo{
@@ -70,20 +87,20 @@ vk_pipeline_set_globe_texture :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline, tex: ^V
 			poolSizeCount = 1,
 			pPoolSizes    = &pool_sizes[0],
 		}
-		if r := vk.CreateDescriptorPool(ctx.device, &pool_ci, nil, &p.globe_desc_pool); r != .SUCCESS {
+		if r := vk.CreateDescriptorPool(ctx.device, &pool_ci, nil, pool); r != .SUCCESS {
 			return
 		}
 
 		layouts := [1]vk.DescriptorSetLayout{p.globe_set_layout}
 		alloc_ci := vk.DescriptorSetAllocateInfo{
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			descriptorPool     = p.globe_desc_pool,
+			descriptorPool     = pool^,
 			descriptorSetCount = 1,
 			pSetLayouts        = &layouts[0],
 		}
-		if r := vk.AllocateDescriptorSets(ctx.device, &alloc_ci, &p.globe_desc_set); r != .SUCCESS {
-			vk.DestroyDescriptorPool(ctx.device, p.globe_desc_pool, nil)
-			p.globe_desc_pool = 0
+		if r := vk.AllocateDescriptorSets(ctx.device, &alloc_ci, set); r != .SUCCESS {
+			vk.DestroyDescriptorPool(ctx.device, pool^, nil)
+			pool^ = 0
 			return
 		}
 	}
@@ -95,7 +112,7 @@ vk_pipeline_set_globe_texture :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline, tex: ^V
 	}
 	write := vk.WriteDescriptorSet{
 		sType           = .WRITE_DESCRIPTOR_SET,
-		dstSet          = p.globe_desc_set,
+		dstSet          = set^,
 		dstBinding      = 0,
 		dstArrayElement = 0,
 		descriptorCount = 1,
@@ -297,6 +314,35 @@ _make_feature_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipel
 		vertexAttributeDescriptionCount = 2, pVertexAttributeDescriptions = &attrs[0],
 	}
 	p.features = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .POINT_LIST)
+}
+
+_make_label_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
+	vert_m := load_shader(ctx.device, "shaders/label.vert.spv")
+	frag_m := load_shader(ctx.device, "shaders/label.frag.spv")
+	defer vk.DestroyShaderModule(ctx.device, vert_m, nil)
+	defer vk.DestroyShaderModule(ctx.device, frag_m, nil)
+
+	stages := [2]vk.PipelineShaderStageCreateInfo{
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX},   module = vert_m, pName = "main"},
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = frag_m, pName = "main"},
+	}
+
+	bind  := [1]vk.VertexInputBindingDescription{{binding = 0, stride = size_of(geo_layers.Label_Vertex), inputRate = .VERTEX}}
+	attrs := [4]vk.VertexInputAttributeDescription{
+		{location = 0, binding = 0, format = .R32G32B32_SFLOAT,    offset = 0},
+		{location = 1, binding = 0, format = .R32G32_SFLOAT,       offset = 12},
+		{location = 2, binding = 0, format = .R32G32_SFLOAT,       offset = 20},
+		{location = 3, binding = 0, format = .R32G32B32A32_SFLOAT, offset = 28},
+	}
+	vert_in := vk.PipelineVertexInputStateCreateInfo{
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		vertexBindingDescriptionCount   = 1, pVertexBindingDescriptions   = &bind[0],
+		vertexAttributeDescriptionCount = 4, pVertexAttributeDescriptions = &attrs[0],
+	}
+	// Depth off: labels float above the globe; horizon fade in the vertex
+	// shader handles back-side hiding. Cull off: quads are screen-space.
+	p.labels = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .TRIANGLE_LIST,
+		enable_depth = false, cull_mode = {})
 }
 
 _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,

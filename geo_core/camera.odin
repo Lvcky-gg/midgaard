@@ -36,13 +36,16 @@ camera_on_scroll :: proc(c: ^Camera, delta: f32) {
 	c.distance = clamp(c.distance - delta * step, 1.03, 18.0)
 }
 
-camera_mvp :: proc(c: Camera) -> [16]f32 {
-	eye := [3]f32{
+camera_eye :: proc(c: Camera) -> [3]f32 {
+	return {
 		c.distance * math.sin(c.azimuth)  * math.cos(c.elevation),
 		c.distance * math.sin(c.elevation),
 		c.distance * math.cos(c.azimuth)  * math.cos(c.elevation),
 	}
-	view := m4_look_at(eye, {0, 0, 0}, {0, 1, 0})
+}
+
+camera_mvp :: proc(c: Camera) -> [16]f32 {
+	view := m4_look_at(camera_eye(c), {0, 0, 0}, {0, 1, 0})
 	near := clamp(c.distance * 0.01, 0.0005, 0.1)
 	proj := m4_perspective(0.9, c.aspect, near, 100.0)
 	return m4_mul(proj, view)
@@ -70,6 +73,17 @@ camera_focus_lat_lon :: proc(c: Camera) -> LatLon {
 	return LatLon{lat = lat, lon = lon}
 }
 
+// camera_world_to_screen projects a world point to framebuffer pixels
+// (origin top-left, y down — matches GLFW cursor coordinates).
+// ok is false when the point is behind the camera.
+camera_world_to_screen :: proc(c: Camera, world: [3]f32, width, height: f32) -> (sx, sy: f32, ok: bool) {
+	clip := m4_mul_v4(camera_mvp(c), {world[0], world[1], world[2], 1})
+	if clip[3] <= 0 { return 0, 0, false }
+	return (clip[0]/clip[3]*0.5 + 0.5) * width,
+	       (clip[1]/clip[3]*0.5 + 0.5) * height,
+	       true
+}
+
 // ── mat4 helpers (column-major, Vulkan clip space) ───────────────────────────
 
 m4_mul :: proc(a, b: [16]f32) -> [16]f32 {
@@ -80,6 +94,14 @@ m4_mul :: proc(a, b: [16]f32) -> [16]f32 {
 				out[col*4+row] += a[k*4+row] * b[col*4+k]
 			}
 		}
+	}
+	return out
+}
+
+m4_mul_v4 :: proc(m: [16]f32, v: [4]f32) -> [4]f32 {
+	out: [4]f32
+	for row in 0..<4 {
+		out[row] = m[0*4+row]*v[0] + m[1*4+row]*v[1] + m[2*4+row]*v[2] + m[3*4+row]*v[3]
 	}
 	return out
 }

@@ -11,7 +11,13 @@ Window :: struct {
 	drag_y:   f64,
 	dragging: bool,
 	drag_button: c.int,
+	press_x:  f64,
+	press_y:  f64,
 }
+
+// CLICK_SLOP_PX separates a pick click from an orbit drag: a left button
+// release counts as a click only if the cursor stayed within this distance.
+CLICK_SLOP_PX :: 4.0
 
 window_create :: proc(width, height: i32, title: cstring) -> Window {
 	if !glfw.Init() { panic("GLFW init failed") }
@@ -51,12 +57,19 @@ _on_mouse_btn :: proc "c" (win: glfw.WindowHandle, button, action, mods: c.int) 
 	if action == glfw.PRESS && (button == glfw.MOUSE_BUTTON_LEFT || button == glfw.MOUSE_BUTTON_RIGHT) {
 		w.dragging = true
 		w.drag_button = button
+		w.press_x = w.drag_x
+		w.press_y = w.drag_y
 		g_app.camera_interaction_cooldown = 10
 		return
 	}
 	if action == glfw.RELEASE && button == w.drag_button {
 		w.dragging = false
 		w.drag_button = 0
+		if button == glfw.MOUSE_BUTTON_LEFT &&
+			abs(w.drag_x - w.press_x) < CLICK_SLOP_PX &&
+			abs(w.drag_y - w.press_y) < CLICK_SLOP_PX {
+			app_handle_click(g_app, w.drag_x, w.drag_y)
+		}
 	}
 }
 
