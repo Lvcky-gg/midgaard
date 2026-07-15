@@ -22,7 +22,14 @@ void main() {
     float rnd = hash12(cell);
     float star_mask = step(0.9978, rnd);
     float star_core = smoothstep(0.35, 0.0, length(f));
-    float twinkle = 0.72 + 0.28 * sin(pc.time_sec * 2.6 + rnd * 120.0);
+    float base_twinkle = 0.78 + 0.22 * sin(pc.time_sec * 2.2 + rnd * 120.0);
+
+    // Sparse brighter pulse stars: very low density and smooth envelope.
+    float pulse_mask = step(0.9992, rnd);
+    float pulse_env = 0.5 + 0.5 * sin(pc.time_sec * (1.1 + rnd * 0.7) + rnd * 900.0);
+    pulse_env = smoothstep(0.25, 1.0, pulse_env);
+
+    float twinkle = base_twinkle + pulse_mask * pulse_env * 0.65;
     float star = star_mask * star_core * twinkle;
 
     vec3 sky = vec3(0.0);

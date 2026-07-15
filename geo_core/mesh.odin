@@ -55,3 +55,44 @@ build_globe_mesh :: proc(stacks, slices: int) -> Globe_Mesh {
 
 	return Globe_Mesh{vertices = verts[:], indices = idxs[:]}
 }
+
+// displace_globe_mesh scales each vertex of a build_globe_mesh result to the
+// given per-vertex radius (same stack-major order) and recomputes normals
+// from the displaced grid so terrain relief shades correctly.
+displace_globe_mesh :: proc(mesh: ^Globe_Mesh, stacks, slices: int, radii: []f32) {
+	stride := slices + 1
+	if len(radii) != len(mesh.vertices) { return }
+
+	for &v, i in mesh.vertices {
+		n := v.normal // unit sphere direction from build_globe_mesh
+		v.position = {n[0]*radii[i], n[1]*radii[i], n[2]*radii[i]}
+	}
+
+	for stack in 0..=stacks {
+		for slice in 0..=slices {
+			i := stack*stride + slice
+
+			// Longitude neighbors wrap; the seam column duplicates column 0.
+			s  := slice % slices
+			sm := (s - 1 + slices) % slices
+			sp := (s + 1) % slices
+			im := stack*stride + sm
+			ip := stack*stride + sp
+			jm := max(stack-1, 0)*stride + s
+			jp := min(stack+1, stacks)*stride + s
+
+			du := v3_sub(mesh.vertices[ip].position, mesh.vertices[im].position)
+			dv := v3_sub(mesh.vertices[jp].position, mesh.vertices[jm].position)
+			n  := v3_cross(dv, du)
+
+			pos := mesh.vertices[i].position
+			if v3_dot(n, pos) < 0 {
+				n = {-n[0], -n[1], -n[2]}
+			}
+			if v3_dot(n, n) < 1e-12 {
+				n = pos // degenerate at poles: fall back to radial normal
+			}
+			mesh.vertices[i].normal = v3_norm(n)
+		}
+	}
+}

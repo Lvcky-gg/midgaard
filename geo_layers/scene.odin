@@ -6,6 +6,7 @@ import geo_core "../geo_core"
 Scene :: struct {
 	layers:   [dynamic]Layer,
 	imagery_layers: [dynamic]ImageryLayer,
+	elevation_layers: [dynamic]ElevationLayer,
 	feature_layers: [dynamic]FeatureLayer,
 	routes:   [dynamic]Route,
 }
@@ -22,6 +23,7 @@ scene_destroy :: proc(s: ^Scene) {
 	}
 	delete(s.layers)
 	delete(s.imagery_layers)
+	delete(s.elevation_layers)
 	delete(s.feature_layers)
 	delete(s.routes)
 }
@@ -36,6 +38,10 @@ scene_add_imagery_layer :: proc(s: ^Scene, l: ImageryLayer) {
 
 scene_add_feature_layer :: proc(s: ^Scene, l: FeatureLayer) {
 	append(&s.feature_layers, l)
+}
+
+scene_add_elevation_layer :: proc(s: ^Scene, l: ElevationLayer) {
+	append(&s.elevation_layers, l)
 }
 
 scene_add_route :: proc(s: ^Scene, r: Route) {

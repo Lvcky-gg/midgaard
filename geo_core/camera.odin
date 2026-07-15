@@ -7,6 +7,7 @@ Camera :: struct {
 	elevation: f32, // vertical orbit angle  (radians)
 	distance:  f32, // distance from origin
 	aspect:    f32, // viewport width / height
+	pitch:     f32, // view pitch away from globe center (radians, 0 = look at center)
 }
 
 camera_create :: proc(width, height: u32) -> Camera {
@@ -25,10 +26,10 @@ camera_on_drag :: proc(c: ^Camera, dx, dy: f32) {
 		f32( math.PI/2.0) - 0.06)
 }
 
-camera_on_tilt :: proc(c: ^Camera, dy: f32) {
-	c.elevation = clamp(c.elevation - dy * 0.008,
-		f32(-math.PI/2.0) + 0.06,
-		f32( math.PI/2.0) - 0.06)
+// camera_on_pitch tilts the view direction away from the globe center:
+// dragging down (dy > 0) pitches toward the horizon, like map tilt gestures.
+camera_on_pitch :: proc(c: ^Camera, dy: f32) {
+	c.pitch = clamp(c.pitch + dy * 0.004, 0.0, 1.35)
 }
 
 camera_on_scroll :: proc(c: ^Camera, delta: f32) {
@@ -44,33 +45,52 @@ camera_eye :: proc(c: Camera) -> [3]f32 {
 	}
 }
 
+// camera_forward is the view direction: toward the globe center, pitched up
+// by c.pitch around the camera's right axis.
+camera_forward :: proc(c: Camera) -> [3]f32 {
+	eye := camera_eye(c)
+	f0  := v3_norm({-eye[0], -eye[1], -eye[2]})
+	r   := v3_norm(v3_cross(f0, {0, 1, 0}))
+	u   := v3_cross(r, f0)
+	cp  := math.cos(c.pitch)
+	sp  := math.sin(c.pitch)
+	return v3_norm({
+		f0[0]*cp + u[0]*sp,
+		f0[1]*cp + u[1]*sp,
+		f0[2]*cp + u[2]*sp,
+	})
+}
+
 camera_mvp :: proc(c: Camera) -> [16]f32 {
-	view := m4_look_at(camera_eye(c), {0, 0, 0}, {0, 1, 0})
+	eye := camera_eye(c)
+	fwd := camera_forward(c)
+	target := [3]f32{eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]}
+	view := m4_look_at(eye, target, {0, 1, 0})
 	near := clamp(c.distance * 0.01, 0.0005, 0.1)
 	proj := m4_perspective(0.9, c.aspect, near, 100.0)
 	return m4_mul(proj, view)
 }
 
+// camera_focus_lat_lon returns the geographic point the camera is looking at:
+// the first intersection of the view ray with the unit sphere, falling back
+// to the sub-camera point when the ray misses the globe (looking at sky).
 camera_focus_lat_lon :: proc(c: Camera) -> LatLon {
-	eye_x := f64(c.distance * math.sin(c.azimuth) * math.cos(c.elevation))
-	eye_y := f64(c.distance * math.sin(c.elevation))
-	eye_z := f64(c.distance * math.cos(c.azimuth) * math.cos(c.elevation))
+	eye := camera_eye(c)
+	fwd := camera_forward(c)
 
-	fx := -eye_x
-	fy := -eye_y
-	fz := -eye_z
-	len := math.sqrt(fx*fx + fy*fy + fz*fz)
-	if len == 0 {
-		return LatLon{}
+	ef   := v3_dot(eye, fwd)
+	disc := ef*ef - (v3_dot(eye, eye) - 1.0)
+
+	p: [3]f32
+	if t := -ef - math.sqrt(max(disc, 0)); disc >= 0 && t > 0 {
+		p = {eye[0] + t*fwd[0], eye[1] + t*fwd[1], eye[2] + t*fwd[2]}
+	} else {
+		p = v3_norm(eye)
 	}
 
-	fx /= len
-	fy /= len
-	fz /= len
-
 	// Inverse of lat_lon_to_xyz (z is negated there).
-	lat := math.asin(fy) * (180.0 / PI)
-	lon := math.atan2(-fz, fx) * (180.0 / PI)
+	lat := math.asin(f64(clamp(p[1], -1, 1))) * (180.0 / PI)
+	lon := math.atan2(f64(-p[2]), f64(p[0])) * (180.0 / PI)
 	return LatLon{lat = lat, lon = lon}
 }
 

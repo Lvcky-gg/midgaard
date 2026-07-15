@@ -22,6 +22,14 @@ demo_scene :: proc() -> geo_layers.Scene {
 		edge_first = true,
 	})
 
+	geo_layers.scene_add_elevation_layer(&s, geo_layers.ElevationLayer{
+		base = {kind = .Elevation, name = "World Terrain", visible = true},
+		url_template = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+		cache_root = "./.cache/elevation/terrarium",
+		tile_zoom = 2,
+		exaggeration = 30,
+	})
+
 	geo_layers.scene_add_layer(&s, geo_layers.Layer{kind = .Imagery,    name = "Base Imagery", visible = true})
 	geo_layers.scene_add_layer(&s, geo_layers.Layer{kind = .Elevation,  name = "Terrain",      visible = true})
 	geo_layers.scene_add_layer(&s, geo_layers.Layer{kind = .Feature,    name = "Ops Features", visible = true})

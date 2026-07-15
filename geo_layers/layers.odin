@@ -43,9 +43,14 @@ Route :: struct {
 
 // ── Canonical layer type stubs ────────────────────────────────────────────────
 
+// ElevationLayer sources terrain heights from terrarium-encoded PNG tiles
+// (Web Mercator XYZ scheme; height_m = R*256 + G + B/256 - 32768).
 ElevationLayer :: struct {
-	base:       Layer,
-	source_url: string,
+	base:         Layer,
+	url_template: string, // {z}/{x}/{y} tile URL
+	cache_root:   string,
+	tile_zoom:    u32,    // mosaic zoom level (2^z x 2^z tiles)
+	exaggeration: f64,    // vertical exaggeration factor for display
 }
 
 FeatureLayer :: struct {

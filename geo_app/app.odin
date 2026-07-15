@@ -67,6 +67,11 @@ app_run :: proc() {
 	app.pipeline  = geo_cvulkan.vk_pipeline_create(&app.ctx, &app.swapchain)
 	app.frame     = geo_cvulkan.vk_frame_create(&app.ctx, &app.swapchain)
 	app.camera    = geo_core.camera_create(app.swapchain.extent.width, app.swapchain.extent.height)
+	// TEMP verification: start low over the Andes, pitched toward the horizon.
+	app.camera.azimuth = 0.349
+	app.camera.elevation = -0.349
+	app.camera.distance = 1.15
+	app.camera.pitch = 0.9
 
 	_upload_geo(&app)
 	_upload_font_atlas(&app)
@@ -104,7 +109,10 @@ app_run :: proc() {
 }
 
 _upload_geo :: proc(app: ^App) {
-	mesh := geo_core.build_globe_mesh(48, 72)
+	// High enough resolution for terrain relief (~0.9deg per vertex).
+	stacks, slices := 192, 384
+	mesh := geo_core.build_globe_mesh(stacks, slices)
+	_apply_terrain(app, &mesh, stacks, slices)
 	app.globe_ic = u32(len(mesh.indices))
 	app.globe_vb = geo_cvulkan.vk_buffer_upload(&app.ctx,
 		vk.DeviceSize(len(mesh.vertices)*size_of(geo_core.Vertex)),
