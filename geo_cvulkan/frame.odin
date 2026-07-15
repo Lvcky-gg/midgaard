@@ -25,6 +25,8 @@ Vk_Draw_State :: struct {
 	feature_count: u32,
 	label_vb:      Vk_Buffer,
 	label_count:   u32,
+	route_vb:      Vk_Buffer,
+	route_count:   u32,
 	mvp:           [16]f32,
 	time_sec:      f32,
 	selected_index: i32,
@@ -153,6 +155,14 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 		vk.CmdBindDescriptorSets(cmd, .GRAPHICS, pl.layout, 0, 1, &sets[0], 0, nil)
 	}
 	vk.CmdDrawIndexed(cmd, ds.globe_ic, 1, 0, 0, 0)
+
+	// Route arcs (depth-tested so they hide behind the globe)
+	if ds.route_count > 0 {
+		vk.CmdBindPipeline(cmd, .GRAPHICS, pl.routes)
+		route_vbs := [1]vk.Buffer{ds.route_vb.handle}
+		vk.CmdBindVertexBuffers(cmd, 0, 1, &route_vbs[0], &offsets[0])
+		vk.CmdDraw(cmd, ds.route_count, 1, 0, 0)
+	}
 
 	// Feature points
 	if ds.feature_count > 0 {

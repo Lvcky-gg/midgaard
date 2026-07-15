@@ -35,8 +35,8 @@ demo_scene :: proc() -> geo_layers.Scene {
 	geo_layers.scene_add_feature(&s, geo_layers.Feature{id = 5, name = "Imagery Index",     position = geo_core.LatLon{lat =  51.5074, lon =   -0.1278}, elevation_m =  35.0, category = .Note,        color = {0.85, 0.78, 0.98, 1}})
 	geo_layers.scene_add_feature(&s, geo_layers.Feature{id = 6, name = "Southern Sensor",   position = geo_core.LatLon{lat = -33.8688, lon =  151.2093}, elevation_m =  22.0, category = .Sensor,      color = {0.72, 0.91, 1.00, 1}})
 
-	geo_layers.scene_add_route(&s, geo_layers.Route{name = "Harbor to Cache", start = geo_core.LatLon{lat = 37.7749, lon = -122.4194}, finish = geo_core.LatLon{lat = 35.6895, lon = 139.6917}})
-	geo_layers.scene_add_route(&s, geo_layers.Route{name = "Ops Link",        start = geo_core.LatLon{lat = 47.6062, lon = -122.3321}, finish = geo_core.LatLon{lat = 51.5074, lon =  -0.1278}})
+	geo_layers.scene_add_route(&s, geo_layers.Route{name = "Harbor to Cache", start = geo_core.LatLon{lat = 37.7749, lon = -122.4194}, finish = geo_core.LatLon{lat = 35.6895, lon = 139.6917}, color = {0.98, 0.62, 0.25, 0.9}})
+	geo_layers.scene_add_route(&s, geo_layers.Route{name = "Ops Link",        start = geo_core.LatLon{lat = 47.6062, lon = -122.3321}, finish = geo_core.LatLon{lat = 51.5074, lon =  -0.1278}, color = {0.35, 0.75, 1.00, 0.9}})
 
 	return s
 }

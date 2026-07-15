@@ -68,8 +68,9 @@ camera_focus_lat_lon :: proc(c: Camera) -> LatLon {
 	fy /= len
 	fz /= len
 
+	// Inverse of lat_lon_to_xyz (z is negated there).
 	lat := math.asin(fy) * (180.0 / PI)
-	lon := math.atan2(fz, fx) * (180.0 / PI)
+	lon := math.atan2(-fz, fx) * (180.0 / PI)
 	return LatLon{lat = lat, lon = lon}
 }
 

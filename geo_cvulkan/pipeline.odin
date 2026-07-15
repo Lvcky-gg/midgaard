@@ -22,6 +22,7 @@ Vk_Pipeline :: struct {
 	globe:        vk.Pipeline,
 	features:     vk.Pipeline,
 	labels:       vk.Pipeline,
+	routes:       vk.Pipeline,
 	framebuffers: []vk.Framebuffer,
 }
 
@@ -35,6 +36,7 @@ vk_pipeline_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Pipeline {
 	_make_globe_pipeline(ctx, sc, &p)
 	_make_feature_pipeline(ctx, sc, &p)
 	_make_label_pipeline(ctx, sc, &p)
+	_make_route_pipeline(ctx, sc, &p)
 	_make_framebuffers(ctx, sc, &p)
 	return p
 }
@@ -44,6 +46,7 @@ vk_pipeline_destroy :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 	vk.DestroyPipeline(ctx.device, p.sky, nil)
 	vk.DestroyPipeline(ctx.device, p.features, nil)
 	vk.DestroyPipeline(ctx.device, p.labels, nil)
+	vk.DestroyPipeline(ctx.device, p.routes, nil)
 	vk.DestroyPipeline(ctx.device, p.globe, nil)
 	if p.globe_desc_pool != 0 {
 		vk.DestroyDescriptorPool(ctx.device, p.globe_desc_pool, nil)
@@ -343,6 +346,33 @@ _make_label_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipelin
 	// shader handles back-side hiding. Cull off: quads are screen-space.
 	p.labels = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .TRIANGLE_LIST,
 		enable_depth = false, cull_mode = {})
+}
+
+_make_route_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline) {
+	vert_m := load_shader(ctx.device, "shaders/route.vert.spv")
+	frag_m := load_shader(ctx.device, "shaders/route.frag.spv")
+	defer vk.DestroyShaderModule(ctx.device, vert_m, nil)
+	defer vk.DestroyShaderModule(ctx.device, frag_m, nil)
+
+	stages := [2]vk.PipelineShaderStageCreateInfo{
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX},   module = vert_m, pName = "main"},
+		{sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = frag_m, pName = "main"},
+	}
+
+	bind  := [1]vk.VertexInputBindingDescription{{binding = 0, stride = size_of(geo_layers.Route_Vertex), inputRate = .VERTEX}}
+	attrs := [3]vk.VertexInputAttributeDescription{
+		{location = 0, binding = 0, format = .R32G32B32_SFLOAT,    offset = 0},
+		{location = 1, binding = 0, format = .R32_SFLOAT,          offset = 12},
+		{location = 2, binding = 0, format = .R32G32B32A32_SFLOAT, offset = 16},
+	}
+	vert_in := vk.PipelineVertexInputStateCreateInfo{
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		vertexBindingDescriptionCount   = 1, pVertexBindingDescriptions   = &bind[0],
+		vertexAttributeDescriptionCount = 3, pVertexAttributeDescriptions = &attrs[0],
+	}
+	// Depth on so arcs vanish behind the globe. Cull off: lines have no faces.
+	p.routes = _build_pipeline(ctx, sc, p, stages[:], &vert_in, .LINE_LIST,
+		cull_mode = {})
 }
 
 _build_pipeline :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain, p: ^Vk_Pipeline,

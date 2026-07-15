@@ -38,6 +38,7 @@ Route :: struct {
 	name:   string,
 	start:  geo_core.LatLon,
 	finish: geo_core.LatLon,
+	color:  [4]f32,
 }
 
 // ── Canonical layer type stubs ────────────────────────────────────────────────

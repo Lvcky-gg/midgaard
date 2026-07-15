@@ -26,6 +26,8 @@ App :: struct {
 	feature_count: u32,
 	label_vb:      geo_cvulkan.Vk_Buffer,
 	label_count:   u32,
+	route_vb:      geo_cvulkan.Vk_Buffer,
+	route_count:   u32,
 	font_tex:      geo_cvulkan.Vk_Texture,
 	selected_feature: i32,
 	globe_tex:     geo_cvulkan.Vk_Texture,
@@ -83,6 +85,8 @@ app_run :: proc() {
 			feature_count = app.feature_count,
 			label_vb      = app.label_vb,
 			label_count   = app.label_count,
+			route_vb      = app.route_vb,
+			route_count   = app.route_count,
 			mvp           = geo_core.camera_mvp(app.camera),
 			time_sec      = time_sec,
 			selected_index = app.selected_feature,
@@ -125,6 +129,15 @@ _upload_geo :: proc(app: ^App) {
 			vk.DeviceSize(len(labels)*size_of(geo_layers.Label_Vertex)),
 			{.VERTEX_BUFFER}, raw_data(labels))
 	}
+
+	route_verts := geo_layers.scene_route_vertices(&app.scene)
+	defer delete(route_verts)
+	app.route_count = u32(len(route_verts))
+	if len(route_verts) > 0 {
+		app.route_vb = geo_cvulkan.vk_buffer_upload(&app.ctx,
+			vk.DeviceSize(len(route_verts)*size_of(geo_layers.Route_Vertex)),
+			{.VERTEX_BUFFER}, raw_data(route_verts))
+	}
 }
 
 _upload_font_atlas :: proc(app: ^App) {
@@ -136,6 +149,7 @@ _upload_font_atlas :: proc(app: ^App) {
 }
 
 _destroy :: proc(app: ^App) {
+	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.route_vb)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.label_vb)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.feature_vb)
 	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.globe_ib)

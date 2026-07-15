@@ -12,10 +12,12 @@ void main() {
     vec3 light_dir = normalize(vec3(-0.65, 0.5, 0.35));
     float shade = 0.35 + 0.65 * max(dot(n, light_dir), 0.0);
 
-    // The loaded world image is exported in EPSG:4326 (equirectangular),
-    // matching the globe mesh UV parameterization directly.
-    // Flip U so longitudes increase in the expected visual direction.
-    vec2 tex_uv = vec2(1.0 - fract(v_uv.x), clamp(1.0 - v_uv.y, 0.0, 1.0));
+    // The loaded world image is exported in EPSG:4326 (equirectangular).
+    // Mesh angle theta = u * 360deg; world longitude is -theta (see
+    // geo_core.lat_lon_to_xyz), and the image's left edge is -180deg, so
+    // u_tex = (lon + 180) / 360 = 0.5 - u. This keeps imagery, features,
+    // and tile prefetch on the same longitudes.
+    vec2 tex_uv = vec2(fract(0.5 - v_uv.x), clamp(1.0 - v_uv.y, 0.0, 1.0));
 
     vec3 color = texture(u_imagery, tex_uv).rgb;
 

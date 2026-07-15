@@ -6,8 +6,10 @@ This workspace is a first vertical slice for an Esri-like geospatial platform in
 
 - A shared Odin core for coordinates, layers, features, and routes.
 - A native Odin entry point that prints the demo scene summary.
+- A native Vulkan client rendering the globe with streamed imagery, feature
+  points with click selection, billboarded name labels, and animated
+  great-circle route arcs.
 - A browser/WebGL client that renders a 3D globe with imagery, feature points, and route overlays.
-- A cvulkan backend stub so the native render path has a defined seam.
 
 ## Layout
 
@@ -134,6 +136,20 @@ Add new scene/layer data:
 1. Extend structs and helpers in `geo_layers`.
 2. Seed demo/test data in `geo_app/demo.odin`.
 3. Convert to GPU inputs in `geo_app` upload path (and backend package if needed).
+
+Coordinate convention:
+
+- World space is Y-up with `geo_core.lat_lon_to_xyz` negating z so longitude
+  increases eastward (screen right) when viewed from outside with north up.
+- The globe imagery UV mapping in `shaders/globe.frag` matches this frame
+  (`u_tex = 0.5 - u`). Keep the two in sync: features, routes, picking, and
+  imagery tile prefetch all assume the same longitudes.
+
+Routes:
+
+- Routes render as great-circle line-list arcs (`geo_layers/routes.odin`)
+  slightly above the surface, depth-tested against the globe, with a flow
+  pulse animated in `shaders/route.frag`.
 
 Picking and labels:
 
