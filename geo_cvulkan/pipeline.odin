@@ -222,7 +222,7 @@ _make_globe_set_layout :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
 }
 
 _make_layout :: proc(ctx: ^Vk_Context, p: ^Vk_Pipeline) {
-	r := vk.PushConstantRange{stageFlags = {.VERTEX}, offset = 0, size = size_of(geo_render.Push_Constants)}
+	r := vk.PushConstantRange{stageFlags = {.VERTEX, .FRAGMENT}, offset = 0, size = size_of(geo_render.Push_Constants)}
 	ranges := [1]vk.PushConstantRange{r}
 	set_layouts := [1]vk.DescriptorSetLayout{p.globe_set_layout}
 	ci := vk.PipelineLayoutCreateInfo{

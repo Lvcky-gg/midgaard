@@ -49,7 +49,7 @@ app_run :: proc() {
 		len(app.scene.layers), len(app.scene.imagery_layers), len(app.scene.features), len(app.scene.routes))
 	_warm_edge_imagery(&app)
 
-	app.window = window_create(1280, 800, "Midgaard")
+	app.window = window_create(3440, 1280, "Midgaard")
 
 	loader := geo_cvulkan.vk_load_library()
 	app.ctx      = geo_cvulkan.vk_context_create(app.window.handle, loader)
@@ -64,6 +64,7 @@ app_run :: proc() {
 	for !window_should_close(&app.window) {
 		glfw.PollEvents()
 		_tick_imagery_streaming(&app)
+		time_sec := f32(app.imagery_frame) * (1.0 / 60.0)
 		ds := geo_cvulkan.Vk_Draw_State{
 			ctx           = &app.ctx,
 			swapchain     = &app.swapchain,
@@ -75,6 +76,7 @@ app_run :: proc() {
 			feature_vb    = app.feature_vb,
 			feature_count = app.feature_count,
 			mvp           = geo_core.camera_mvp(app.camera),
+			time_sec      = time_sec,
 		}
 		geo_cvulkan.vk_draw_frame(&ds)
 	}

@@ -24,6 +24,7 @@ Vk_Draw_State :: struct {
 	feature_vb:    Vk_Buffer,
 	feature_count: u32,
 	mvp:           [16]f32,
+	time_sec:      f32,
 }
 
 vk_frame_create :: proc(ctx: ^Vk_Context, sc: ^Vk_Swapchain) -> Vk_Frame_Data {
@@ -121,10 +122,11 @@ _record :: proc(ds: ^Vk_Draw_State, cmd: vk.CommandBuffer, img_idx: u32) {
 	}
 	vk.CmdBeginRenderPass(cmd, &rp_begin, .INLINE)
 
-	pc := geo_render.Push_Constants{mvp = ds.mvp}
+	pc := geo_render.Push_Constants{mvp = ds.mvp, time_sec = ds.time_sec}
 
 	// Sky/background
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pl.sky)
+	vk.CmdPushConstants(cmd, pl.layout, {.FRAGMENT}, 0, size_of(geo_render.Push_Constants), &pc)
 	vk.CmdDraw(cmd, 3, 1, 0, 0)
 
 	// Globe

@@ -2,6 +2,11 @@
 
 layout(location = 0) out vec4 out_color;
 
+layout(push_constant) uniform PushConstants {
+    mat4 mvp;
+    float time_sec;
+} pc;
+
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -17,7 +22,8 @@ void main() {
     float rnd = hash12(cell);
     float star_mask = step(0.9978, rnd);
     float star_core = smoothstep(0.35, 0.0, length(f));
-    float star = star_mask * star_core;
+    float twinkle = 0.72 + 0.28 * sin(pc.time_sec * 2.6 + rnd * 120.0);
+    float star = star_mask * star_core * twinkle;
 
     vec3 sky = vec3(0.0);
 

@@ -1,8 +1,9 @@
 package geo_render
 
-// Push_Constants is the 64-byte block shared by all shaders across backends.
+// Push_Constants is the block shared by all shaders across backends.
 Push_Constants :: struct {
 	mvp: [16]f32,
+	time_sec: f32,
 }
 
 // Draw_Command is a backend-agnostic draw instruction produced by the scene graph.
