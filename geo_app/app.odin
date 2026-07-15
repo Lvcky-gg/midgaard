@@ -324,24 +324,27 @@ _prefetch_focus_tiles :: proc(app: ^App, layer: ^geo_layers.ImageryLayer, focus:
 	}
 }
 
+// Export sizes match the bbox aspect (360 x 170.1022 degrees) so ArcGIS does
+// not letterbox the image with black bars; globe.frag maps the +-85.0511
+// coverage back onto the full sphere.
 _select_world_imagery_lod :: proc(target_zoom: u32) -> (string, string, i32) {
 	if target_zoom >= 8 {
-		return "./.cache/imagery/base/world_8192x4096.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=8192,4096&format=jpg&f=image",
+		return "./.cache/imagery/base/world_8192x3872.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=8192,3872&format=jpg&f=image",
 			2
 	}
 	if target_zoom >= 5 {
-		return "./.cache/imagery/base/world_6144x3072.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=6144,3072&format=jpg&f=image",
+		return "./.cache/imagery/base/world_6144x2904.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=6144,2904&format=jpg&f=image",
 			1
 	}
 	if target_zoom >= 3 {
-		return "./.cache/imagery/base/world_4096x2048.jpg",
-			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=4096,2048&format=jpg&f=image",
+		return "./.cache/imagery/base/world_4096x1936.jpg",
+			"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=4096,1936&format=jpg&f=image",
 			0
 	}
-	return "./.cache/imagery/base/world_3072x1536.jpg",
-		"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=3072,1536&format=jpg&f=image",
+	return "./.cache/imagery/base/world_3072x1452.jpg",
+		"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=-180,-85.0511,180,85.0511&bboxSR=4326&imageSR=4326&size=3072,1452&format=jpg&f=image",
 		0
 }
 
