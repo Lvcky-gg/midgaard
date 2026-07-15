@@ -54,7 +54,7 @@ app_run :: proc() {
 		len(app.scene.layers), len(app.scene.imagery_layers), len(app.scene.features), len(app.scene.routes))
 	_warm_edge_imagery(&app)
 
-	app.window = window_create(1920, 1080, "Midgaard")
+	app.window = window_create(0, 0, "Midgaard") // size to the primary monitor
 
 	loader := geo_cvulkan.vk_load_library()
 	app.ctx      = geo_cvulkan.vk_context_create(app.window.handle, loader)

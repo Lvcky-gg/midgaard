@@ -19,11 +19,32 @@ Window :: struct {
 // release counts as a click only if the cursor stayed within this distance.
 CLICK_SLOP_PX :: 4.0
 
+// window_create opens a non-resizable window. Pass width/height <= 0 to size
+// it to the primary monitor (maximized).
 window_create :: proc(width, height: i32, title: cstring) -> Window {
 	if !glfw.Init() { panic("GLFW init failed") }
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 	glfw.WindowHint(glfw.RESIZABLE, false)
-	h := glfw.CreateWindow(width, height, title, nil, nil)
+
+	w, hgt := width, height
+	if w <= 0 || hgt <= 0 {
+		// Size to the largest monitor: the primary can be a small or portrait
+		// display in multi-monitor setups.
+		for monitor in glfw.GetMonitors() {
+			mode := glfw.GetVideoMode(monitor)
+			if mode == nil { continue }
+			if int(mode.width) * int(mode.height) > int(w) * int(hgt) {
+				w = mode.width
+				hgt = mode.height
+			}
+		}
+		if w <= 0 || hgt <= 0 {
+			w, hgt = 1920, 1080
+		}
+		glfw.WindowHint(glfw.MAXIMIZED, true)
+	}
+
+	h := glfw.CreateWindow(w, hgt, title, nil, nil)
 	if h == nil { panic("GLFW window creation failed") }
 	glfw.SetKeyCallback(h, _on_key)
 	glfw.SetMouseButtonCallback(h, _on_mouse_btn)
