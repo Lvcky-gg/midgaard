@@ -26,15 +26,29 @@ camera_on_drag :: proc(c: ^Camera, dx, dy: f32) {
 		f32( math.PI/2.0) - 0.06)
 }
 
+// camera_max_pitch aims the view axis at the horizon. The globe's silhouette
+// subtends asin(1/distance) around the center direction, so this is the tilt
+// that puts its upper limb on the view axis: at the limit the globe still fills
+// the lower half of the frame, and any further would slide it off the bottom.
+// It tightens as the camera pulls back, which is why pitch cannot be a constant
+// clamp — at distance 3.5 the globe leaves the frustum entirely by 0.74 rad.
+camera_max_pitch :: proc(c: Camera) -> f32 {
+	if c.distance <= 1 { return f32(math.PI / 2.0) }
+	return math.asin(1.0 / c.distance)
+}
+
 // camera_on_pitch tilts the view direction away from the globe center:
 // dragging down (dy > 0) pitches toward the horizon, like map tilt gestures.
 camera_on_pitch :: proc(c: ^Camera, dy: f32) {
-	c.pitch = clamp(c.pitch + dy * 0.004, 0.0, 1.35)
+	c.pitch = clamp(c.pitch + dy * 0.004, 0.0, camera_max_pitch(c^))
 }
 
 camera_on_scroll :: proc(c: ^Camera, delta: f32) {
 	step := max(f32(0.06), c.distance * 0.14)
 	c.distance = clamp(c.distance - delta * step, 1.03, 18.0)
+	// Pulling back shrinks the horizon angle: re-clamp so a tilt that was legal
+	// up close does not leave the globe off screen once zoomed out.
+	c.pitch = min(c.pitch, camera_max_pitch(c^))
 }
 
 camera_eye :: proc(c: Camera) -> [3]f32 {
@@ -45,27 +59,42 @@ camera_eye :: proc(c: Camera) -> [3]f32 {
 	}
 }
 
-// camera_forward is the view direction: toward the globe center, pitched up
-// by c.pitch around the camera's right axis.
-camera_forward :: proc(c: Camera) -> [3]f32 {
+// camera_basis returns the view direction and view up, both rotated by c.pitch
+// around the camera's right axis. Pitch must rotate up along with forward: at
+// pitch = 90deg + elevation the view direction passes through world up, and a
+// basis built from world up there collapses and flips its right axis.
+camera_basis :: proc(c: Camera) -> (fwd, up: [3]f32) {
 	eye := camera_eye(c)
 	f0  := v3_norm({-eye[0], -eye[1], -eye[2]})
 	r   := v3_norm(v3_cross(f0, {0, 1, 0}))
-	u   := v3_cross(r, f0)
+	u0  := v3_cross(r, f0)
 	cp  := math.cos(c.pitch)
 	sp  := math.sin(c.pitch)
-	return v3_norm({
-		f0[0]*cp + u[0]*sp,
-		f0[1]*cp + u[1]*sp,
-		f0[2]*cp + u[2]*sp,
+	fwd = v3_norm({
+		f0[0]*cp + u0[0]*sp,
+		f0[1]*cp + u0[1]*sp,
+		f0[2]*cp + u0[2]*sp,
 	})
+	up = v3_norm({
+		u0[0]*cp - f0[0]*sp,
+		u0[1]*cp - f0[1]*sp,
+		u0[2]*cp - f0[2]*sp,
+	})
+	return
+}
+
+// camera_forward is the view direction: toward the globe center, pitched up
+// by c.pitch around the camera's right axis.
+camera_forward :: proc(c: Camera) -> [3]f32 {
+	fwd, _ := camera_basis(c)
+	return fwd
 }
 
 camera_mvp :: proc(c: Camera) -> [16]f32 {
 	eye := camera_eye(c)
-	fwd := camera_forward(c)
+	fwd, up := camera_basis(c)
 	target := [3]f32{eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]}
-	view := m4_look_at(eye, target, {0, 1, 0})
+	view := m4_look_at(eye, target, up)
 	near := clamp(c.distance * 0.01, 0.0005, 0.1)
 	proj := m4_perspective(0.9, c.aspect, near, 100.0)
 	return m4_mul(proj, view)
