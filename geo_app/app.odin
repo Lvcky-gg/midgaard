@@ -28,6 +28,7 @@ App :: struct {
 	label_count:   u32,
 	route_vb:      geo_cvulkan.Vk_Buffer,
 	route_count:   u32,
+	routes_visible: bool,
 	font_tex:      geo_cvulkan.Vk_Texture,
 	selected_feature: i32,
 	globe_tex:     geo_cvulkan.Vk_Texture,
@@ -52,8 +53,10 @@ app_run :: proc() {
 
 	app.scene = demo_scene()
 	app.selected_feature = -1
-	fmt.printf("Midgaard — layers:%d  imagery:%d  features:%d  routes:%d\n",
-		len(app.scene.layers), len(app.scene.imagery_layers), len(app.scene.features), len(app.scene.routes))
+	app.routes_visible = true
+	fmt.printf("Midgaard — layers:%d  imagery:%d  feature layers:%d  features:%d  routes:%d\n",
+		len(app.scene.layers), len(app.scene.imagery_layers), len(app.scene.feature_layers),
+		geo_layers.scene_feature_count(&app.scene), len(app.scene.routes))
 	_warm_edge_imagery(&app)
 
 	app.window = window_create(0, 0, "Midgaard") // size to the primary monitor
@@ -86,7 +89,7 @@ app_run :: proc() {
 			label_vb      = app.label_vb,
 			label_count   = app.label_count,
 			route_vb      = app.route_vb,
-			route_count   = app.route_count,
+			route_count   = app.routes_visible ? app.route_count : 0,
 			mvp           = geo_core.camera_mvp(app.camera),
 			time_sec      = time_sec,
 			selected_index = app.selected_feature,
@@ -112,6 +115,21 @@ _upload_geo :: proc(app: ^App) {
 	delete(mesh.vertices)
 	delete(mesh.indices)
 
+	_upload_features(app)
+
+	route_verts := geo_layers.scene_route_vertices(&app.scene)
+	defer delete(route_verts)
+	app.route_count = u32(len(route_verts))
+	if len(route_verts) > 0 {
+		app.route_vb = geo_cvulkan.vk_buffer_upload(&app.ctx,
+			vk.DeviceSize(len(route_verts)*size_of(geo_layers.Route_Vertex)),
+			{.VERTEX_BUFFER}, raw_data(route_verts))
+	}
+}
+
+// _upload_features (re)builds the feature point and label buffers from the
+// currently visible feature layers.
+_upload_features :: proc(app: ^App) {
 	pts := geo_layers.scene_feature_points(&app.scene)
 	defer delete(pts)
 	app.feature_count = u32(len(pts))
@@ -129,15 +147,31 @@ _upload_geo :: proc(app: ^App) {
 			vk.DeviceSize(len(labels)*size_of(geo_layers.Label_Vertex)),
 			{.VERTEX_BUFFER}, raw_data(labels))
 	}
+}
 
-	route_verts := geo_layers.scene_route_vertices(&app.scene)
-	defer delete(route_verts)
-	app.route_count = u32(len(route_verts))
-	if len(route_verts) > 0 {
-		app.route_vb = geo_cvulkan.vk_buffer_upload(&app.ctx,
-			vk.DeviceSize(len(route_verts)*size_of(geo_layers.Route_Vertex)),
-			{.VERTEX_BUFFER}, raw_data(route_verts))
-	}
+// app_toggle_feature_layer flips a feature layer's visibility and rebuilds
+// the GPU buffers. Selection is cleared because pick indices refer to the
+// flattened visible-feature order, which just changed.
+app_toggle_feature_layer :: proc(app: ^App, index: int) {
+	if index < 0 || index >= len(app.scene.feature_layers) { return }
+	layer := &app.scene.feature_layers[index]
+	layer.base.visible = !layer.base.visible
+	app.selected_feature = -1
+
+	vk.DeviceWaitIdle(app.ctx.device)
+	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.feature_vb)
+	geo_cvulkan.vk_buffer_destroy(&app.ctx, &app.label_vb)
+	app.feature_count = 0
+	app.label_count = 0
+	_upload_features(app)
+
+	fmt.printf("Layer %d — %s: %s\n", index+1, layer.base.name,
+		layer.base.visible ? "visible" : "hidden")
+}
+
+app_toggle_routes :: proc(app: ^App) {
+	app.routes_visible = !app.routes_visible
+	fmt.printf("Routes: %s\n", app.routes_visible ? "visible" : "hidden")
 }
 
 _upload_font_atlas :: proc(app: ^App) {

@@ -66,8 +66,15 @@ window_should_close :: proc(w: ^Window) -> bool {
 
 _on_key :: proc "c" (win: glfw.WindowHandle, key, scancode, action, mods: c.int) {
 	context = runtime.default_context()
-	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
+	if action != glfw.PRESS { return }
+
+	switch {
+	case key == glfw.KEY_ESCAPE:
 		glfw.SetWindowShouldClose(win, true)
+	case key == glfw.KEY_R:
+		if g_app != nil { app_toggle_routes(g_app) }
+	case key >= glfw.KEY_1 && key <= glfw.KEY_9:
+		if g_app != nil { app_toggle_feature_layer(g_app, int(key - glfw.KEY_1)) }
 	}
 }
 

@@ -52,6 +52,9 @@ Open `web/index.html` in a browser.
   to the console.
 - Right mouse drag: tilt (change elevation angle only).
 - Mouse wheel: zoom in/out.
+- `1`-`9`: toggle feature layer visibility (demo scene: `1` Ops Sites,
+  `2` Sensor Net). Hiding a layer also hides its labels and clears selection.
+- `R`: toggle route arcs.
 - `Esc`: close window.
 
 ### Interaction Tuning
@@ -136,6 +139,15 @@ Add new scene/layer data:
 1. Extend structs and helpers in `geo_layers`.
 2. Seed demo/test data in `geo_app/demo.odin`.
 3. Convert to GPU inputs in `geo_app` upload path (and backend package if needed).
+
+Feature layers:
+
+- Features live in `FeatureLayer`s (`Scene.feature_layers`), not a flat list.
+- `scene_visible_features` flattens visible layers in stable order; that
+  order IS the GPU buffer order, so it doubles as the pick/highlight index.
+- Toggling visibility rebuilds the feature/label buffers
+  (`app_toggle_feature_layer` waits for device idle first) and clears the
+  selection, since flat indices shift.
 
 Coordinate convention:
 

@@ -150,14 +150,18 @@ LABEL_TEXT_SCALE  :: 2.0  // 8px glyphs drawn at 16px
 LABEL_OFFSET_X_PX :: 14.0 // gap right of the feature point
 LABEL_OFFSET_Y_PX :: -8.0 // vertically center the line on the point
 
-// scene_label_vertices builds two triangles per glyph for every feature name.
-// The buffer is static: billboarding happens in the label vertex shader.
+// scene_label_vertices builds two triangles per glyph for every visible
+// feature's name. The buffer is static between visibility changes:
+// billboarding happens in the label vertex shader.
 // Caller owns the returned slice.
 scene_label_vertices :: proc(s: ^Scene) -> []Label_Vertex {
+	feats := scene_visible_features(s)
+	defer delete(feats)
+
 	verts := make([dynamic]Label_Vertex)
 	advance := f32(8 * LABEL_TEXT_SCALE)
 
-	for &f in s.features {
+	for &f in feats {
 		xyz := geo_core.lat_lon_to_xyz(
 			geo_core.LatLon{lat = f.position.lat, lon = f.position.lon}, 1.01)
 		anchor := [3]f32{f32(xyz.x), f32(xyz.y), f32(xyz.z)}

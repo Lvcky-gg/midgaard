@@ -39,14 +39,17 @@ pick_feature :: proc(app: ^App, cursor_x, cursor_y: f64) -> int {
 }
 
 // app_handle_click resolves a click into feature selection state.
-// Scene feature order matches the feature vertex buffer, so the picked index
-// doubles as the shader's selected_index.
+// The flattened visible-feature order matches the feature vertex buffer, so
+// the picked index doubles as the shader's selected_index.
 app_handle_click :: proc(app: ^App, x, y: f64) {
 	idx := pick_feature(app, x, y)
 	app.selected_feature = i32(idx)
 
-	if idx >= 0 && idx < len(app.scene.features) {
-		f := app.scene.features[idx]
+	feats := geo_layers.scene_visible_features(&app.scene)
+	defer delete(feats)
+
+	if idx >= 0 && idx < len(feats) {
+		f := feats[idx]
 		fmt.printf("Selected feature #%d — %s  [%v]  lat:%.4f lon:%.4f elev:%.0fm\n",
 			f.id, f.name, f.category, f.position.lat, f.position.lon, f.elevation_m)
 	} else {
