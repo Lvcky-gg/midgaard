@@ -110,7 +110,7 @@ _on_cursor :: proc "c" (win: glfw.WindowHandle, x, y: f64) {
 		dy := f32(y - w.drag_y)
 		g_app.camera_interaction_cooldown = 10
 		if w.drag_button == glfw.MOUSE_BUTTON_RIGHT {
-			geo_core.camera_on_pitch(&g_app.camera, dy)
+			geo_core.camera_orbit(&g_app.camera, dx, dy)
 		} else {
 			geo_core.camera_on_drag(&g_app.camera, dx, dy)
 		}

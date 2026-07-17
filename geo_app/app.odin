@@ -67,11 +67,6 @@ app_run :: proc() {
 	app.pipeline  = geo_cvulkan.vk_pipeline_create(&app.ctx, &app.swapchain)
 	app.frame     = geo_cvulkan.vk_frame_create(&app.ctx, &app.swapchain)
 	app.camera    = geo_core.camera_create(app.swapchain.extent.width, app.swapchain.extent.height)
-	// TEMP verification: start low over the Andes, pitched toward the horizon.
-	app.camera.azimuth = 0.349
-	app.camera.elevation = -0.349
-	app.camera.distance = 1.15
-	app.camera.pitch = 0.9
 
 	_upload_geo(&app)
 	_upload_font_atlas(&app)
@@ -313,7 +308,9 @@ _tick_imagery_streaming :: proc(app: ^App) {
 }
 
 _target_imagery_zoom :: proc(cam: geo_core.Camera) -> u32 {
-	d := cam.distance
+	// LOD keys off eye altitude (distance from the globe center), which the
+	// orbit's eye-to-target range does not equal once the view is tilted.
+	d := geo_core.camera_center_distance(cam)
 	if d <= 1.05 { return 10 }
 	if d <= 1.10 { return 9 }
 	if d <= 1.18 { return 8 }
